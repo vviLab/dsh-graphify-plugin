@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.5.0] - 2026-10-29
+
 ### Added
 - **LLM credential settings**: `backend`, `apiKeyEnv`, and `apiKey` are now `volatile` plugin fields, so DSH renders them on the plugin settings page and applies an edit to the next build without restarting the entry. `apiKey` carries `role('secret')`, so a stored key is redacted before it reaches a browser.
 - **Credential resolution for semantic extraction**: before a build or update, the plugin resolves the key through `ctx.credentials` first and the launching environment second, then exports it to the Graphify subprocess under the variable the chosen backend reads. A key already saved for a DSH model provider is reused without being copied into the plugin config.
