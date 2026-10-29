@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Configuration section on the plugin's own page**: the Web client fills the plugin manager's `plugins.bundle.config` slot, keyed by the package name, so Settings → Plugins → dsh-graphify shows a configuration section beside the package's source, version, and update controls instead of a separate settings tab. It is registered only while the Host serves the `dsh-graphify` namespace, and it stages a credential reference plus an optional literal key that are written on Save; the literal is write-only, and a blank draft leaves the stored value alone. DSH renders no generic page for a plugin's `Config`, so a plugin without this contribution shows no settings at all.
 
+### Fixed
+- **Zero-install runtime is project-neutral**: the fallback now runs `uvx --from 'graphifyy[...]'` (and `graphify-mcp` for the MCP side) instead of `uv run --with`, so a session project holding `pyproject.toml` is no longer resolved, no `.venv` or `uv.lock` appears in it, and no `--no-project` flag is required. `uv tool run --from` covers hosts where `uvx` is absent from `PATH`.
+- **Zero-install runtime installed no LLM SDK**: `uvx --from graphifyy==<version>` produced a runtime without `openai`, so every semantic chunk failed with `the 'openai' package is required for this backend` and the build ended with `all semantic chunks failed`. The fallback now asks for the extra matching the resolved backend (`openai` for the OpenAI-compatible backends, `anthropic` for `claude`, `bedrock` for Bedrock), which is the same spec the install instructions use.
+- **Per-chunk SDK failures repeated 82 times** with no actionable next step. A failure that names a missing SDK now appends one install command for the runtime, in addition to the credential note.
+- **Install instructions omitted the SDK extra**: README, `graphify_status`, and the resolution remediations all suggested `graphifyy[mcp]`, which cannot run semantic extraction.
+
 ### Changed
 - `registerGraphifyCommand` accepts an optional spawn-environment source, and `registerGraphifyTools` accepts an optional dependency bag whose `describeLlm` feeds the new status line. Both keep the previous behavior when omitted.
 - `Config` is declared as a volatile-bearing schema and asserted to the plain `Config` interface; `validateConfig` and `apply` unwrap live references before reading them.

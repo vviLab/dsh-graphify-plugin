@@ -19,7 +19,8 @@ describe('Graphify release contract', () => {
 
     const config = Config({ command: 'auto' })
     const resolved = resolveGraphifyCommand(config, graphPath)
-    assert.ok(resolved.command.includes('graphify-mcp') || resolved.command.includes('python'), 'Command should resolve to graphify-mcp or python')
+    const launch = [resolved.command, ...resolved.args].join(' ')
+    assert.ok(launch.includes('graphify-mcp') || launch.includes('python'), 'Launch should reach graphify-mcp or the python module')
     const client = new GraphifyMcpClient({ ...resolved, cwd: fixtureDir, timeoutMs: 30_000 })
     try {
       const tools = await client.listTools()

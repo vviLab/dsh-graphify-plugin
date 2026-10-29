@@ -111,6 +111,12 @@ describe('Graphify DSH Web command presentation', () => {
       effect(fn: () => (() => void) | void) {
         return fn()
       },
+      // The bundle also defers its settings contribution until the Host serves
+      // configForms/slots/locale. That path has its own tests; this case covers
+      // the command presentation, so the injection stays inert here.
+      inject(_deps: string[]) {
+        return () => {}
+      },
     }
 
     apply(mockCtx)

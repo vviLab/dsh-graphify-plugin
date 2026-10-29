@@ -6,6 +6,7 @@ import type { Config } from './config.ts'
 import {
   resolveGraphifyCliCommand,
   resolveGraphifyCliRuntime,
+  llmExtrasForBackend,
   terminateChildProcess,
   DEFAULT_GRAPHIFY_VERSION,
 } from './server-process.ts'
@@ -145,15 +146,17 @@ export function registerGraphifyCommand(
       try {
         const projectRoot = invocation.agent.session.header.cwd || defaultProjectRoot
         const request = parseGraphifyCommand(invocation.rawInput, projectRoot)
-        const cliResolution = resolveGraphifyCliRuntime(config, request)
+        // Resolve the credential first: the uvx fallback has to install the LLM
+        // SDK the selected backend imports, and a bare `graphifyy` has none.
+        spawnEnv = await resolveSpawnEnvironmentFor(resolveSpawnEnv)
+        const cliResolution = resolveGraphifyCliRuntime(config, request, llmExtrasForBackend(spawnEnv?.backend))
         if (!cliResolution.available) {
           return {
             kind: 'error',
-            text: `Graphify is not installed.\n\nInstall it with:\n  uv tool install 'graphifyy[mcp]==${DEFAULT_GRAPHIFY_VERSION}'\n\nor configure \`cliCommand\` in cordis.yml.`,
+            text: `Graphify is not installed.\n\nInstall it with:\n  uv tool install 'graphifyy[mcp,openai]==${DEFAULT_GRAPHIFY_VERSION}'\n\n(add 'anthropic' when the backend is claude) or configure \`cliCommand\` in cordis.yml.`,
           }
         }
         const { command, args } = cliResolution
-        spawnEnv = await resolveSpawnEnvironmentFor(resolveSpawnEnv)
         const canonicalGraphJson = path.join(request.projectRoot, 'graphify-out', 'graph.json')
 
         if (request.operation === 'build') {
@@ -277,13 +280,34 @@ export function registerGraphifyCommand(
         }
       } catch (error) {
         const text = error instanceof Error ? error.message : String(error)
-        const hint = spawnEnv?.note ? `\n\n${spawnEnv.note}` : ''
+        const notes = [spawnEnv?.note, missingSdkHint(text, spawnEnv?.backend)]
+          .filter((note): note is string => typeof note === 'string' && note !== '')
+        const hint = notes.map((note) => `\n\n${note}`).join('')
         return { kind: 'error', text: `Graphify failed: ${text}${hint}` }
       }
     },
   }
 
   return ctx.commands.register(def)
+}
+
+/**
+ * Turn a missing-SDK failure into the one install command that fixes it.
+ *
+ * `graphifyy` imports its LLM SDK lazily, so a runtime installed without the
+ * matching extra parses code and then fails every semantic chunk. The raw chunk
+ * errors repeat once per chunk and never say which extra the *runtime* needs,
+ * which is why this reads the first one and restates it as one command.
+ *
+ * @param text - the failure text Graphify wrote to stderr.
+ * @param backend - backend the invocation selected, when known.
+ * @returns the note to append, or undefined when the failure is unrelated.
+ */
+export function missingSdkHint(text: string, backend?: string | null): string | undefined {
+  const match = /the '([A-Za-z0-9_.-]+)' package (?:is )?required/.exec(text)
+  if (!match) return undefined
+  const extras = [...new Set(['mcp', ...llmExtrasForBackend(backend)])].join(',')
+  return `Graphify's ${backend ?? 'selected'} backend needs the '${match[1]}' package inside the runtime that ran it, and this runtime does not have it. Install a runtime that does:\n  uv tool install 'graphifyy[${extras}]==${DEFAULT_GRAPHIFY_VERSION}' --force\nthen run graphify_status to confirm the runtime source, and retry.`
 }
 
 /**

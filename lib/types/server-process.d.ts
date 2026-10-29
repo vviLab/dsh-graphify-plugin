@@ -3,6 +3,38 @@ import type { Config } from './config.ts';
 import type { GraphifyCommandRequest } from './commands.ts';
 /** Tested default Graphify version pinned for reproducible marketplace deployments. */
 export declare const DEFAULT_GRAPHIFY_VERSION = "0.9.57";
+/**
+ * LLM SDK extras Graphify imports lazily for one backend.
+ *
+ * `graphifyy` ships no LLM SDK by default: the OpenAI-compatible backends
+ * (`openai`, `deepseek`, `gemini`, `kimi`, `ollama`) import `openai`, and
+ * `claude` imports `anthropic`. A runtime installed without them parses code but
+ * fails every semantic chunk, so the uv fallback must ask for the SDK it needs.
+ */
+export declare function llmExtrasForBackend(backend?: string | null): string[];
+/**
+ * Build the `--with` package spec for the uv fallback.
+ * @param version - graphifyy version to run.
+ * @param extras - extras the runtime needs, deduplicated in order.
+ * @returns the pip-style spec, for example `graphifyy[mcp,openai]==0.9.57`.
+ */
+export declare function uvPackageSpec(version: string, extras?: readonly string[]): string;
+/**
+ * Resolves the launcher that runs a package entry point without installing it.
+ *
+ * `uvx` and `uv tool run` are the same engine; the subcommand form is used only
+ * when `uvx` is missing from PATH. Neither form reads the session project, so a
+ * repository holding `pyproject.toml` is left untouched by a `/graphify` run.
+ *
+ * @param spec - pinned package spec, for example `graphifyy[mcp]==0.9.57`.
+ * @param entryPoint - console script exported by that package.
+ * @param tail - arguments appended after the entry point.
+ * @returns the launcher, or null when neither uvx nor uv is on PATH.
+ */
+export declare function resolveUvEntryPointLauncher(spec: string, entryPoint: string, tail?: readonly string[]): {
+    command: string;
+    args: string[];
+} | null;
 /** Command used to start a local Graphify process. */
 export interface GraphifyCommand {
     readonly command: string;
@@ -48,9 +80,9 @@ export declare function resolveGraphifyCommand(config: Config, graphPath?: strin
 /**
  * Resolves diagnostic and launch information for the Graphify CLI runtime without throwing.
  */
-export declare function resolveGraphifyCliRuntime(config: Config, request: GraphifyCommandRequest): CliRuntimeResolution;
+export declare function resolveGraphifyCliRuntime(config: Config, request: GraphifyCommandRequest, extras?: readonly string[]): CliRuntimeResolution;
 /** Resolves the CLI used by the direct build and update command. */
-export declare function resolveGraphifyCliCommand(config: Config, request: GraphifyCommandRequest): GraphifyCommand;
+export declare function resolveGraphifyCliCommand(config: Config, request: GraphifyCommandRequest, extras?: readonly string[]): GraphifyCommand;
 /** Probes for installed Graphify version via `graphify --version`. */
 export declare function getDetectedGraphifyVersion(): string | undefined;
 /**

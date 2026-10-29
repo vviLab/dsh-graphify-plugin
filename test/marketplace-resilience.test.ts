@@ -83,7 +83,7 @@ describe('Marketplace Startup & Resilience', () => {
 
         assert.equal(statusResult.overall, 'unavailable', 'Overall status must be unavailable')
         assert.match(statusResult.text, /Graphify Status: UNAVAILABLE/)
-        assert.match(statusResult.text, new RegExp(`uv tool install 'graphifyy\\[mcp\\]==${DEFAULT_GRAPHIFY_VERSION}'`))
+        assert.match(statusResult.text, new RegExp(`uv tool install 'graphifyy\\[mcp,openai\\]==${DEFAULT_GRAPHIFY_VERSION}'`))
 
         // 4. Invoking a Graphify tool returns an actionable error, not an unhandled rejection
         const queryTool = registeredTools.get('query_graph')!
@@ -106,7 +106,7 @@ describe('Marketplace Startup & Resilience', () => {
 
         assert.equal(cmdResult.kind, 'error')
         assert.match(cmdResult.text, /Graphify is not installed/i)
-        assert.match(cmdResult.text, new RegExp(`uv tool install 'graphifyy\\[mcp\\]==${DEFAULT_GRAPHIFY_VERSION}'`))
+        assert.match(cmdResult.text, new RegExp(`uv tool install 'graphifyy\\[mcp,openai\\]==${DEFAULT_GRAPHIFY_VERSION}'`))
       } finally {
         if (fiber) await fiber.dispose()
         process.env.PATH = originalPath

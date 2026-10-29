@@ -262,7 +262,7 @@ export function formatGraphifyStatus(status: GraphifyStatusResult): string {
     if (status.mcp.state === 'reconnecting') {
       lines.push('Recommendation: MCP connection is recovering. Graphify will be available when reconnection succeeds.')
     } else {
-      lines.push(`Recommendation: Graphify runtime is unavailable. Verify installation with \`uv tool install 'graphifyy[mcp]==${DEFAULT_GRAPHIFY_VERSION}'\` or configure \`command\` in cordis.yml.`)
+      lines.push(`Recommendation: Graphify runtime is unavailable. Verify installation with \`uv tool install 'graphifyy[mcp,openai]==${DEFAULT_GRAPHIFY_VERSION}'\` (add 'anthropic' for the claude backend) or configure \`command\` in cordis.yml.`)
     }
   } else {
     lines.push('Recommendation: Graph state is unknown. Inspect graphify-out/ and run `/graphify build` if needed.')

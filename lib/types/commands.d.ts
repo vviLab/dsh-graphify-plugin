@@ -56,3 +56,16 @@ export declare const ALLOWED_GRAPHIFY_FLAGS: readonly ["--force", "--no-cluster"
 export declare function parseGraphifyCommand(rawInput: string, projectRoot: string): GraphifyCommandRequest;
 /** Registers the `/graphify` build and incremental-update command. */
 export declare function registerGraphifyCommand(ctx: Context, config: Config, defaultProjectRoot: string, resolveSpawnEnv?: SpawnEnvironmentSource): () => void;
+/**
+ * Turn a missing-SDK failure into the one install command that fixes it.
+ *
+ * `graphifyy` imports its LLM SDK lazily, so a runtime installed without the
+ * matching extra parses code and then fails every semantic chunk. The raw chunk
+ * errors repeat once per chunk and never say which extra the *runtime* needs,
+ * which is why this reads the first one and restates it as one command.
+ *
+ * @param text - the failure text Graphify wrote to stderr.
+ * @param backend - backend the invocation selected, when known.
+ * @returns the note to append, or undefined when the failure is unrelated.
+ */
+export declare function missingSdkHint(text: string, backend?: string | null): string | undefined;

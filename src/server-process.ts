@@ -7,6 +7,58 @@ import type { GraphifyCommandRequest } from './commands.ts'
 /** Tested default Graphify version pinned for reproducible marketplace deployments. */
 export const DEFAULT_GRAPHIFY_VERSION = '0.9.57'
 
+/**
+ * LLM SDK extras Graphify imports lazily for one backend.
+ *
+ * `graphifyy` ships no LLM SDK by default: the OpenAI-compatible backends
+ * (`openai`, `deepseek`, `gemini`, `kimi`, `ollama`) import `openai`, and
+ * `claude` imports `anthropic`. A runtime installed without them parses code but
+ * fails every semantic chunk, so the uv fallback must ask for the SDK it needs.
+ */
+export function llmExtrasForBackend(backend?: string | null): string[] {
+  if (backend === 'claude') return ['anthropic']
+  if (backend === 'bedrock') return ['bedrock']
+  return ['openai']
+}
+
+/**
+ * Build the `--with` package spec for the uv fallback.
+ * @param version - graphifyy version to run.
+ * @param extras - extras the runtime needs, deduplicated in order.
+ * @returns the pip-style spec, for example `graphifyy[mcp,openai]==0.9.57`.
+ */
+export function uvPackageSpec(version: string, extras: readonly string[] = []): string {
+  const unique = [...new Set(extras.filter((extra) => extra !== ''))]
+  const suffix = unique.length > 0 ? `[${unique.join(',')}]` : ''
+  return `graphifyy${suffix}==${version}`
+}
+
+/**
+ * Resolves the launcher that runs a package entry point without installing it.
+ *
+ * `uvx` and `uv tool run` are the same engine; the subcommand form is used only
+ * when `uvx` is missing from PATH. Neither form reads the session project, so a
+ * repository holding `pyproject.toml` is left untouched by a `/graphify` run.
+ *
+ * @param spec - pinned package spec, for example `graphifyy[mcp]==0.9.57`.
+ * @param entryPoint - console script exported by that package.
+ * @param tail - arguments appended after the entry point.
+ * @returns the launcher, or null when neither uvx nor uv is on PATH.
+ */
+export function resolveUvEntryPointLauncher(
+  spec: string,
+  entryPoint: string,
+  tail: readonly string[] = []
+): { command: string; args: string[] } | null {
+  if (findCommand('uvx')) {
+    return { command: 'uvx', args: ['--from', spec, entryPoint, ...tail] }
+  }
+  if (findCommand('uv')) {
+    return { command: 'uv', args: ['tool', 'run', '--from', spec, entryPoint, ...tail] }
+  }
+  return null
+}
+
 /** Command used to start a local Graphify process. */
 export interface GraphifyCommand {
   readonly command: string
@@ -104,17 +156,17 @@ export function resolveGraphifyRuntime(
     }
   }
 
-  if (isCommandAvailable('uv')) {
-    const version = config.graphifyVersion || DEFAULT_GRAPHIFY_VERSION
-    const packageSpec = `graphifyy[mcp]==${version}`
-    const args = ['run', '--with', packageSpec, '-m', 'graphify.serve']
-    if (graphPath) {
-      args.push(graphPath)
-    }
+  const version = config.graphifyVersion || DEFAULT_GRAPHIFY_VERSION
+  const launcher = resolveUvEntryPointLauncher(
+    `graphifyy[mcp]==${version}`,
+    'graphify-mcp',
+    graphPath ? [graphPath] : []
+  )
+  if (launcher) {
     return {
       available: true,
-      command: 'uv',
-      args,
+      command: launcher.command,
+      args: launcher.args,
       source: 'uv',
       version,
     }
@@ -122,8 +174,8 @@ export function resolveGraphifyRuntime(
 
   return {
     available: false,
-    reason: 'Graphify runtime is not installed and uv is not available on PATH.',
-    remediation: `Install Graphify with:\n  uv tool install 'graphifyy[mcp]==${DEFAULT_GRAPHIFY_VERSION}'\nor configure \`command\` in cordis.yml.`,
+    reason: 'Graphify runtime is not installed and neither uvx nor uv is available on PATH.',
+    remediation: `Install Graphify with:\n  uv tool install 'graphifyy[mcp,openai]==${DEFAULT_GRAPHIFY_VERSION}'\nor configure \`command\` in cordis.yml.`,
   }
 }
 
@@ -147,7 +199,8 @@ export function resolveGraphifyCommand(
  */
 export function resolveGraphifyCliRuntime(
   config: Config,
-  request: GraphifyCommandRequest
+  request: GraphifyCommandRequest,
+  extras: readonly string[] = []
 ): CliRuntimeResolution {
   const operation = request.operation === 'update' ? ['update'] : []
   if (config.cliCommand) {
@@ -169,27 +222,35 @@ export function resolveGraphifyCliRuntime(
     }
   }
 
-  if (isCommandAvailable('uv')) {
-    const version = config.graphifyVersion || DEFAULT_GRAPHIFY_VERSION
-    const packageSpec = `graphifyy==${version}`
+  const version = config.graphifyVersion || DEFAULT_GRAPHIFY_VERSION
+  const launcher = resolveUvEntryPointLauncher(
+    uvPackageSpec(version, extras),
+    'graphify',
+    [...operation, request.projectRoot, ...request.flags]
+  )
+  if (launcher) {
     return {
       available: true,
-      command: 'uv',
-      args: ['run', '--with', packageSpec, 'graphify', ...operation, request.projectRoot, ...request.flags],
+      command: launcher.command,
+      args: launcher.args,
       source: 'uv',
     }
   }
 
   return {
     available: false,
-    reason: 'Graphify CLI is not installed and uv is not available on PATH.',
-    remediation: `Install Graphify with:\n  uv tool install 'graphifyy[mcp]==${DEFAULT_GRAPHIFY_VERSION}'\nor configure \`cliCommand\` in cordis.yml.`,
+    reason: 'Graphify CLI is not installed and neither uvx nor uv is available on PATH.',
+    remediation: `Install Graphify with:\n  uv tool install 'graphifyy[mcp,openai]==${DEFAULT_GRAPHIFY_VERSION}'\nor configure \`cliCommand\` in cordis.yml.`,
   }
 }
 
 /** Resolves the CLI used by the direct build and update command. */
-export function resolveGraphifyCliCommand(config: Config, request: GraphifyCommandRequest): GraphifyCommand {
-  const res = resolveGraphifyCliRuntime(config, request)
+export function resolveGraphifyCliCommand(
+  config: Config,
+  request: GraphifyCommandRequest,
+  extras: readonly string[] = []
+): GraphifyCommand {
+  const res = resolveGraphifyCliRuntime(config, request, extras)
   if (!res.available) {
     throw new Error(`${res.reason} ${res.remediation}`)
   }

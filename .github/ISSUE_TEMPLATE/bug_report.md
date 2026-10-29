@@ -13,7 +13,7 @@ A clear and concise description of what the bug is.
 Steps to reproduce the behavior:
 1. Workspace setup / command used
 2. `cordis.patch.yml` or plugin configuration
-3. Graphify version (`uv run --with graphifyy graphify --version`)
+3. Graphify version (`uvx --from graphifyy graphify --version`)
 4. Tool invoked or command run
 5. See error
 
