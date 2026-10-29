@@ -120,6 +120,8 @@ export interface GraphifyToolDependencies {
    * The description never contains the key itself.
    */
   describeLlm?: () => Promise<string>
+  /** Formats the running build jobs owned by the calling Session. */
+  listJobs?: (sessionId?: string) => readonly string[]
 }
 
 /**
@@ -376,9 +378,12 @@ export function createGraphifyToolDefinitions(
         const llm = deps?.describeLlm
           ? await deps.describeLlm().catch(() => undefined)
           : undefined
+        const sessionId = (exec as { agent?: { session?: { header?: { id?: string } } } } | undefined)?.agent?.session?.header?.id
+        const jobs = deps?.listJobs?.(typeof sessionId === 'string' ? sessionId : undefined) ?? []
         const status = await collectGraphifyStatus(project, client, config, {
           probe: shouldProbe,
           ...(llm ? { llm } : {}),
+          ...(jobs.length > 0 ? { jobs } : {}),
         })
         const text = formatGraphifyStatus(status)
         return toLosslessJson({

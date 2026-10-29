@@ -224,6 +224,29 @@ enough on its own. GitHub's secret scanning and push protection are enabled on
 this repository, so a push containing a recognized credential is blocked before
 it lands.
 
+## Long builds and progress
+
+`/graphify build` does not block the turn. Before any work starts it scans the project
+and states the scope — `≈` counts of code, documents, papers, and images, whether an
+LLM key resolved, and, when semantic extraction is needed, a rough chunk count and
+what that means (`--code-only` skips it entirely).
+
+The build itself runs as a DSH background job of kind `graphify`. Graphify's stdout and
+stderr stream into the job's output ring line by line, the last reported line becomes
+the job's live progress line, and cancelling the job terminates the child with the same
+SIGTERM→SIGKILL escalation the blocking path used. `graphify_status` lists the running
+job for the calling Session, and the build's bookkeeping (a full-corpus freshness
+baseline, or metadata removal for `--code-only`) runs when the job succeeds — so a
+completed job leaves exactly the freshness state a blocking build did.
+
+`/graphify update` stays synchronous on purpose: it is short, and its checkpoint
+decision needs the result before the command settles.
+
+The scope figures are deliberately approximate: the scan skips `.git`, `node_modules`,
+`graphify-out`, and similar directories, caps how many entries it inspects, and reports
+`≈` rather than a promise. Hosts that expose no job registry keep the previous blocking
+behavior.
+
 ## Configuration reference
 
 The defaults work for most single-repository sessions. These are the settings

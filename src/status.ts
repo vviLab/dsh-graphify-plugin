@@ -19,6 +19,8 @@ export interface CollectStatusOptions {
    * key. Omitted when the caller has no credential resolution available.
    */
   readonly llm?: string
+  /** Running build jobs owned by this Session, already formatted. */
+  readonly jobs?: readonly string[]
 }
 
 /**
@@ -160,6 +162,7 @@ export async function collectGraphifyStatus(
     freshness,
     runtime,
     ...(options?.llm ? { llm: options.llm } : {}),
+    ...(options?.jobs && options.jobs.length > 0 ? { jobs: options.jobs } : {}),
     mcp: {
       state: mcpState,
       reconnectAttempts: client.getReconnectAttempts(),
@@ -227,6 +230,9 @@ export function formatGraphifyStatus(status: GraphifyStatusResult): string {
   lines.push(`• Runtime: ${status.runtime.command} [${status.runtime.source}]${runtimeVer}`)
   if (status.llm) {
     lines.push(`• LLM Key: ${status.llm}`)
+  }
+  if (status.jobs && status.jobs.length > 0) {
+    lines.push(`• Build Jobs: ${status.jobs.join('; ')}`)
   }
   const reconnectInfo = status.mcp.state === 'reconnecting'
     ? ` (attempt ${status.mcp.reconnectAttempts}/${status.mcp.maxReconnectAttempts})`

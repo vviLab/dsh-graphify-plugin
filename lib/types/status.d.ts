@@ -9,6 +9,8 @@ export interface CollectStatusOptions {
      * key. Omitted when the caller has no credential resolution available.
      */
     readonly llm?: string;
+    /** Running build jobs owned by this Session, already formatted. */
+    readonly jobs?: readonly string[];
 }
 /**
  * Collects a comprehensive status report for Graphify in the given project/session.

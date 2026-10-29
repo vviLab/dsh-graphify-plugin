@@ -17,6 +17,7 @@ import { ProjectResolver } from './project-resolver.ts'
 import { checkGraphFreshness, ProjectUpdateCoalescer } from './freshness.ts'
 import { collectGraphifyStatus, formatGraphifyStatus } from './status.ts'
 import { getPackageVersion } from './version.ts'
+import { describeRunningJobs, resolveJobRegistry } from './progress.ts'
 import {
   describeSpawnEnvironment,
   readConfigField,
@@ -156,7 +157,10 @@ export function apply(ctx: Context, config?: Config): void {
       ? registerGraphifyPrompt(ctx, initialProject, cfg, resolver)
       : () => {}
 
-    const unregisterTools = registerGraphifyTools(ctx, client, cfg, resolver, { describeLlm })
+    const unregisterTools = registerGraphifyTools(ctx, client, cfg, resolver, {
+      describeLlm,
+      listJobs: (sessionId?: string) => describeRunningJobs(resolveJobRegistry(ctx), sessionId),
+    })
 
     return async () => {
       try {

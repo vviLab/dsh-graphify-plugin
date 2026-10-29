@@ -190,6 +190,8 @@ export type McpConnectionState = 'disconnected' | 'connecting' | 'connected' | '
 /** Structured result returned by the `graphify_status` doctor tool. */
 export interface GraphifyStatusResult {
     readonly overall: GraphifyOverallStatus;
+    /** Running Graphify build jobs owned by this Session, when the Host reports them. */
+    readonly jobs?: readonly string[];
     readonly projectRoot: string;
     readonly graphPath: string | null;
     readonly graphExists: boolean;

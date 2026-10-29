@@ -29,6 +29,8 @@ export interface GraphifyToolDependencies {
      * The description never contains the key itself.
      */
     describeLlm?: () => Promise<string>;
+    /** Formats the running build jobs owned by the calling Session. */
+    listJobs?: (sessionId?: string) => readonly string[];
 }
 /**
  * Creates Graphify's native tools, doctor tool, plus capability and resource accessors.

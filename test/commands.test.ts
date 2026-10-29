@@ -56,6 +56,36 @@ describe('/graphify command', () => {
     assert.match(result.text || '', new RegExp(`update",\\"${fixtureDir.replaceAll('/', '\\/')}\\"`))
   })
 
+  it('hands a build to the job registry and returns the scope immediately', async () => {
+    const ctx = new Context()
+    let command: CommandDefinition | undefined
+    ctx.provide('commands')
+    ctx.commands = { register(definition: CommandDefinition) { command = definition; return () => {} } }
+    const started: Array<{ kind: string; label: string }> = []
+    ctx.provide('jobs')
+    ;(ctx as unknown as { jobs: unknown }).jobs = {
+      start(spec: { kind: string; label: string }) {
+        started.push({ kind: spec.kind, label: spec.label })
+        return 'graphify-job-1'
+      },
+    }
+
+    const config = Config({ cliCommand: process.execPath, cliArgs: [cliPath] })
+    registerGraphifyCommand(ctx, config, fixtureDir)
+    const result = await command!.handler({
+      rawInput: 'build . --code-only',
+      agent: { session: { header: { cwd: fixtureDir, id: 'session-7' } } },
+      signal: new AbortController().signal,
+    })
+
+    assert.equal(result.kind, 'success')
+    assert.match(result.text || '', /background job `graphify-job-1`/)
+    assert.match(result.text || '', /Scope:/)
+    assert.equal(started.length, 1)
+    assert.equal(started[0].kind, 'graphify')
+    assert.match(started[0].label, /\/graphify build /)
+  })
+
   it('exports the resolved LLM key into the Graphify process', async () => {
     const ctx = new Context()
     let command: CommandDefinition | undefined

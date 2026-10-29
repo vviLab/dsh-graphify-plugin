@@ -9,6 +9,8 @@ export interface CommandInvocation {
         readonly session: {
             readonly header: {
                 readonly cwd?: string;
+                /** Durable Session id, used to fence the build job to this Session. */
+                readonly id?: string;
             };
         };
     };

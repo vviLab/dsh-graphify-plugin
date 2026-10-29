@@ -19,6 +19,13 @@ import {
   isSafeChange,
 } from './freshness.ts'
 import type { SpawnEnvironmentResolution } from './spawn-env.ts'
+import {
+  describeInventory,
+  describeRunningJobs,
+  resolveJobRegistry,
+  scanSourceInventory,
+  startBuildJob,
+} from './progress.ts'
 
 /** Supplies the spawn environment that carries the configured LLM key for one invocation. */
 export type SpawnEnvironmentSource = () => Promise<SpawnEnvironmentResolution>
@@ -29,6 +36,8 @@ export interface CommandInvocation {
     readonly session: {
       readonly header: {
         readonly cwd?: string
+        /** Durable Session id, used to fence the build job to this Session. */
+        readonly id?: string
       }
     }
   }
@@ -161,46 +170,39 @@ export function registerGraphifyCommand(
 
         if (request.operation === 'build') {
           const isCodeOnly = request.flags.includes('--code-only')
+          const registry = resolveJobRegistry(ctx)
+          const finalize = (output: string) =>
+            finalizeBuild(request.projectRoot, canonicalGraphJson, isCodeOnly, output)
+
+          if (registry) {
+            // A build can run for minutes; hand it to the Host job registry so the
+            // command returns a scope estimate now and the job stream shows progress.
+            const preflight = describeInventory(scanSourceInventory(request.projectRoot), {
+              hasLlmKey: Boolean(spawnEnv && spawnEnv.source !== 'none'),
+              flags: request.flags,
+            })
+            const header = invocation.agent.session.header
+            const jobId = startBuildJob({
+              registry,
+              label: `/graphify build ${request.projectRoot}`,
+              owner: typeof header.id === 'string' ? header.id : undefined,
+              command,
+              args,
+              cwd: request.projectRoot,
+              env: spawnEnv?.env,
+              preflight,
+              finalize,
+            })
+            return {
+              kind: 'success',
+              text: `Graphify build started as background job \`${jobId}\`.\n\n${preflight}\n\nThe build no longer blocks this turn: the job stream carries Graphify's output as it runs, and \`graphify_status\` reports the running job.`,
+            }
+          }
+
           const text = await runGraphify(command, args, request.projectRoot, invocation.signal, spawnEnv?.env)
 
-          if (isCodeOnly) {
-            // --code-only builds skip semantic/document sources; do not establish full-corpus baseline.
-            // Best-effort unlink preexisting index metadata so old baseline is not falsely assumed for new graph.
-            try {
-              const metaPath = path.join(path.dirname(canonicalGraphJson), INDEX_METADATA_FILENAME)
-              if (fs.existsSync(metaPath)) {
-                fs.unlinkSync(metaPath)
-              }
-            } catch {
-              // Ignore unlink error
-            }
-            return {
-              kind: 'success',
-              text: `${text}\n\nNote: Graphify code-only build completed. Because --code-only skips semantic/document sources, this build does not establish a full-corpus freshness baseline.`,
-            }
-          }
-
-          if (performPostUpdateValidation(request.projectRoot, canonicalGraphJson)) {
-            let meta = null
-            try {
-              meta = writeGraphifyIndexMetadata(request.projectRoot, canonicalGraphJson)
-            } catch {
-              // Metadata recording failure ignored
-            }
-            if (meta?.git?.baselineComplete === true) {
-              return { kind: 'success', text }
-            } else {
-              return {
-                kind: 'success',
-                text: `${text}\n\nWarning: Graphify build completed, but dsh-graphify could not capture a complete source-state baseline. Freshness remains unverified.`,
-              }
-            }
-          } else {
-            return {
-              kind: 'success',
-              text: `${text}\n\nWarning: Post-build validation failed for graph.json. Freshness metadata was not recorded.`,
-            }
-          }
+          const note = finalize(text)
+          return { kind: 'success', text: note ? `${text}\n\n${note}` : text }
         }
 
         // Incremental update (/graphify update)
@@ -289,6 +291,48 @@ export function registerGraphifyCommand(
   }
 
   return ctx.commands.register(def)
+}
+
+/**
+ * Records the build's freshness bookkeeping and returns the note to append.
+ *
+ * Extracted so the blocking path and the background job share one authority on
+ * whether this build may claim a full-corpus baseline.
+ *
+ * @param projectRoot - project the build targeted.
+ * @param canonicalGraphJson - that project's graph.json path.
+ * @param isCodeOnly - whether the build carried `--code-only`.
+ * @param _output - Graphify's own output; unused, kept for call-site symmetry.
+ * @returns the note to show, or undefined when the baseline is trustworthy.
+ */
+function finalizeBuild(
+  projectRoot: string,
+  canonicalGraphJson: string,
+  isCodeOnly: boolean,
+  _output?: string
+): string | undefined {
+  if (isCodeOnly) {
+    // --code-only skips semantic sources, so a full-corpus baseline would be false.
+    try {
+      const metaPath = path.join(path.dirname(canonicalGraphJson), INDEX_METADATA_FILENAME)
+      if (fs.existsSync(metaPath)) fs.unlinkSync(metaPath)
+    } catch {
+      // Best-effort: a stale baseline file must never block the build result.
+    }
+    return 'Note: Graphify code-only build completed. Because --code-only skips semantic/document sources, this build does not establish a full-corpus freshness baseline.'
+  }
+
+  if (!performPostUpdateValidation(projectRoot, canonicalGraphJson)) {
+    return 'Warning: Post-build validation failed for graph.json. Freshness metadata was not recorded.'
+  }
+  let meta = null
+  try {
+    meta = writeGraphifyIndexMetadata(projectRoot, canonicalGraphJson)
+  } catch {
+    // Metadata recording failure ignored
+  }
+  if (meta?.git?.baselineComplete === true) return undefined
+  return 'Warning: Graphify build completed, but dsh-graphify could not capture a complete source-state baseline. Freshness remains unverified.'
 }
 
 /**

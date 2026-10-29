@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **Non-blocking builds with live progress**: `/graphify build` now reports the project's scope (approximate code/doc/paper/image counts, whether an LLM key resolved, and the expected semantic chunk count) and returns immediately, then runs Graphify as a Host job of kind `graphify`. Output streams into the job ring line by line, the last line becomes the job's progress line, cancelling the job terminates the child, and `graphify_status` lists the running job. Post-build bookkeeping still runs on success, so freshness results are unchanged. Hosts without a job registry fall back to the previous blocking behavior; `/graphify update` remains synchronous.
 
 ## [0.5.0] - 2026-10-29
 
