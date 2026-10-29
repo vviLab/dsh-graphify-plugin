@@ -1,82 +1,221 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { PromptSection, DetectedGraph, ResolvedProject } from './types.ts'
+import type { PromptAssemblyContext, PromptSection, DetectedGraph, ResolvedProject } from './types.ts'
 import type { Config } from './config.ts'
 import { getPrefixedToolName } from './tools.ts'
 import { ProjectResolver } from './project-resolver.ts'
 
 /**
+ * Placement of the Graphify guidance section inside the system prompt.
+ *
+ * The contract is positional, not cosmetic: the section must render after the
+ * harness identity and deployment persona (order 0) and before plan/team policy
+ * (500/600), PTC-only rules (800), and every single-tool guidance section (1000+).
+ * `registerGraphifyPrompt` warns at mount when a harness build reports a
+ * first-party order that violates this window.
+ */
+export const GRAPHIFY_SECTION_ORDER = 250
+
+/** One decision-policy bullet; `scope: 'full'` bullets are omitted in compact mode. */
+interface DecisionEntry {
+  /** Tool-surface modes that render this bullet. */
+  readonly scope: 'all' | 'full'
+  /** Renders the bullet with the configured tool-name prefix applied. */
+  readonly render: (name: (base: string) => string) => string
+}
+
+const DECISION_ENTRIES: readonly DecisionEntry[] = [
+  {
+    scope: 'all',
+    render: (name) =>
+      `- Architecture and concept discovery: use \`${name('query_graph')}\`; callers, callees, dependencies: \`${name('get_neighbors')}\`; call path between modules: \`${name('shortest_path')}\`.`,
+  },
+  {
+    scope: 'all',
+    render: (name) =>
+      `- Exact symbol or interface details: use \`${name('get_node')}\` with a label or ID.`,
+  },
+  {
+    scope: 'all',
+    render: (name) =>
+      `- Graph health, freshness, git sync: \`${name('graphify_status')}\`; pre-built reports and audits: \`${name('graphify_project_resource')}\` (\`resource: report|wiki|stats\`).`,
+  },
+  {
+    scope: 'full',
+    render: (name) =>
+      `- Hub abstractions: \`${name('god_nodes')}\`; cluster and module boundaries: \`${name('get_community')}\`; PR blast radius: \`${name('list_prs')}\` or \`${name('get_pr_impact')}\`.`,
+  },
+  {
+    scope: 'full',
+    render: (name) =>
+      `- Capability discovery and escape hatches: \`${name('graphify_capabilities')}\` then \`${name('graphify_call')}\`.`,
+  },
+]
+
+const SOURCE_PRINCIPLE = [
+  '### Authoritative Source Principle',
+  '1. **Navigation first, source files authoritative**: use Graphify to locate files, then read the real source for implementation details.',
+  '2. **Never edit blind**: do not modify code based only on a graph description.',
+  '3. **Stop querying early**: once you have enough evidence, inspect or edit the files instead of issuing more graph queries.',
+  '4. **Trivial tasks**: for a single obvious file, use direct filesystem tools.',
+]
+
+/**
+ * Builds the guidance text for a session whose project has a knowledge graph.
+ *
+ * @param name - Resolves a base tool name to its registered, prefixed name.
+ * @param isCompact - Whether the compact tool surface is registered.
+ * @returns The rendered section text.
+ */
+function buildGraphPresentText(name: (base: string) => string, isCompact: boolean): string {
+  const decisions = DECISION_ENTRIES.filter((entry) => entry.scope === 'all' || !isCompact).map((entry) =>
+    entry.render(name)
+  )
+
+  return [
+    '## Graphify Knowledge Graph & Decision Policy',
+    '',
+    'This workspace has a local Graphify knowledge graph (graphify-out/graph.json) for structural navigation, dependency analysis, and architecture exploration.',
+    '',
+    '### Decision Policy: When to use Graphify',
+    ...decisions,
+    '',
+    ...SOURCE_PRINCIPLE,
+    '',
+    '### Session Reports & Diagnostics',
+    `- \`${name('graphify_status')}\` reports graph state, paths, and freshness for the active workspace.`,
+    '- `graphify-out/GRAPH_REPORT.md` and `graphify-out/wiki/index.md` carry pre-built overviews when present.',
+  ].join('\n')
+}
+
+/**
+ * Builds the guidance text for a session with no knowledge graph.
+ *
+ * States the absence instead of asserting a capability the session does not
+ * have, and gives the one instruction that resolves it.
+ *
+ * @param name - Resolves a base tool name to its registered, prefixed name.
+ * @returns The rendered section text.
+ */
+function buildGraphMissingText(name: (base: string) => string): string {
+  return [
+    '## Graphify Knowledge Graph & Decision Policy',
+    '',
+    'No Graphify knowledge graph is present for this session’s project: graphify-out/graph.json was not found.',
+    '',
+    `To create one, run \`/graphify build\` in the project root. Until a graph exists, use direct filesystem tools; once it exists, \`${name('query_graph')}\`, \`${name('get_node')}\`, \`${name('get_neighbors')}\`, and \`${name('shortest_path')}\` become available.`,
+    '',
+    '### Authoritative Source Principle',
+    '1. **Source files stay authoritative**: read the real source before editing, with or without a graph.',
+    '2. **Trivial tasks**: for a single obvious file, use direct filesystem tools.',
+  ].join('\n')
+}
+
+/**
+ * Resolves whether the assembling session's project has a knowledge graph.
+ *
+ * Prefers the assembling agent's session working directory; falls back to the
+ * project detected when the plugin mounted, which covers bare programmatic
+ * assembly with no agent. Filesystem failures degrade to "no graph" so assembly
+ * never throws.
+ *
+ * @param context - Assembly context supplied by the harness.
+ * @param detectedGraph - Project detected at mount time, used when no agent is present.
+ * @param resolver - Session-scoped project resolver.
+ * @returns Whether a readable graph.json exists for the target project.
+ */
+function resolveHasGraph(
+  context: PromptAssemblyContext | undefined,
+  detectedGraph: DetectedGraph | ResolvedProject | null | undefined,
+  resolver: ProjectResolver | undefined
+): boolean {
+  try {
+    const agentCwd = context?.agent?.session.header.cwd?.trim()
+    if (agentCwd && resolver) {
+      return resolver.resolve({ agentCwd }).hasGraph
+    }
+  } catch {
+    // Unreadable project state must not break prompt assembly; report no graph.
+    return false
+  }
+
+  return detectedGraph?.hasGraph === true
+}
+
+/**
  * Creates the Graphify decision policy prompt section for coding agents.
  *
- * Formulates a clear decision workflow (when to query, when to read source, when to stop),
- * dynamically honoring configured tool prefixes, compact/full tool modes, and project status.
+ * The text is state-aware: it resolves the assembling session's project on
+ * every assembly and reports either usable graph access or the absence of a
+ * graph, never both. Tool names follow the configured prefix so the prose and
+ * the registered tool surface cannot disagree.
+ *
+ * @param detectedGraph - Project detected at mount time, used for bare assembly.
+ * @param config - Plugin configuration providing tool prefix and surface mode.
+ * @param resolver - Session-scoped project resolver.
+ * @returns The prompt section registration.
  */
 export function createGraphifyPromptSection(
-  _detectedGraph?: DetectedGraph | ResolvedProject | null,
+  detectedGraph?: DetectedGraph | ResolvedProject | null,
   config?: Config,
-  _resolver?: ProjectResolver
+  resolver?: ProjectResolver
 ): PromptSection {
   const prefix = config?.toolPrefix || ''
   const isCompact = config?.toolMode === 'compact'
-
-  const queryTool = getPrefixedToolName('query_graph', prefix)
-  const nodeTool = getPrefixedToolName('get_node', prefix)
-  const neighborsTool = getPrefixedToolName('get_neighbors', prefix)
-  const pathTool = getPrefixedToolName('shortest_path', prefix)
-  const statusTool = getPrefixedToolName('graphify_status', prefix)
-  const projectResourceTool = getPrefixedToolName('graphify_project_resource', prefix)
+  const name = (base: string) => getPrefixedToolName(base, prefix)
 
   return {
     name: 'graphify:guidance',
-    order: 250,
-    text: () => {
-      const lines: string[] = [
-        '## Graphify Knowledge Graph & Decision Policy',
-        '',
-        'This workspace provides access to a local Graphify knowledge graph for structural navigation, dependency analysis, and architecture exploration.',
-        '',
-        '### Decision Policy: When to use Graphify',
-        `- High-level architecture or concept discovery: use \`${queryTool}\` (BFS for broad context, DFS for deep traces).`,
-        `- Exact symbol or interface details: use \`${nodeTool}\` with symbol label or ID.`,
-        `- Direct callers, callees, or dependencies: use \`${neighborsTool}\`.`,
-        `- Relationship or call path between two modules: use \`${pathTool}\`.`,
-        `- Graph usability, freshness, or git sync status: use \`${statusTool}\`.`,
-      ]
+    order: GRAPHIFY_SECTION_ORDER,
+    text: (context?: PromptAssemblyContext) =>
+      resolveHasGraph(context, detectedGraph, resolver)
+        ? buildGraphPresentText(name, isCompact)
+        : buildGraphMissingText(name),
+  }
+}
 
-      if (!isCompact) {
-        const godTool = getPrefixedToolName('god_nodes', prefix)
-        const commTool = getPrefixedToolName('get_community', prefix)
-        const prImpactTool = getPrefixedToolName('get_pr_impact', prefix)
-        lines.push(
-          `- Core abstractions and high-degree hub nodes: use \`${godTool}\`.`,
-          `- Cluster and module boundaries: use \`${commTool}\`.`,
-          `- Pull request review & blast radius: use \`${prImpactTool}\` or \`${getPrefixedToolName('list_prs', prefix)}\`.`
-        )
-      }
+/**
+ * Warns when a harness build places first-party sections outside the window the
+ * Graphify section relies on. Never throws: placement is advisory, and a
+ * mismatched harness must still boot.
+ *
+ * @param ctx - DSH context owning the system prompt registry.
+ * @param logger - Optional scoped logger.
+ */
+function warnOnSectionOrderDrift(
+  ctx: Context,
+  logger: { warn: (message: string) => void } | undefined
+): void {
+  const getSectionOrder = ctx.systemPrompt?.getSectionOrder
+  if (typeof getSectionOrder !== 'function' || logger === undefined) {
+    return
+  }
 
-      lines.push(
-        `- Pre-generated reports and audits: use \`${projectResourceTool}\` (e.g. \`resource: 'report'\` or \`resource: 'wiki'\`).`,
-        '',
-        '### Authoritative Source Principle',
-        '1. **Navigation first, source files authoritative**: Use Graphify to pinpoint relevant directories and files, then read the actual source files for implementation details.',
-        '2. **Never edit blind**: Do NOT modify code based solely on graph descriptions without reading the real source file.',
-        '3. **Stop querying early**: Once you locate the relevant code or have enough evidence, proceed directly with file inspection or edits. Avoid redundant graph queries.',
-        '4. **Trivial tasks**: For simple single-file edits or obvious locations, use direct filesystem tools rather than Graphify.'
+  try {
+    const personaOrder = getSectionOrder('DEPLOYMENT_PERSONA_PREFIX')
+    const planOrder = getSectionOrder('PLAN_POLICY')
+    if (typeof personaOrder === 'number' && GRAPHIFY_SECTION_ORDER <= personaOrder) {
+      logger.warn(
+        `graphify:guidance order ${GRAPHIFY_SECTION_ORDER} does not follow DEPLOYMENT_PERSONA_PREFIX (${personaOrder}); guidance may render before the deployment persona.`
       )
-
-      lines.push(
-        '',
-        '### Session Reports & Diagnostics',
-        `- Use \`${statusTool}\` to inspect graph status, report locations, and freshness for the active workspace.`,
-        `- When available in the workspace, refer to \`graphify-out/GRAPH_REPORT.md\` and \`graphify-out/wiki/index.md\` for structural overviews.`
+    }
+    if (typeof planOrder === 'number' && GRAPHIFY_SECTION_ORDER >= planOrder) {
+      logger.warn(
+        `graphify:guidance order ${GRAPHIFY_SECTION_ORDER} does not precede PLAN_POLICY (${planOrder}); guidance may render after plan policy.`
       )
-
-      return lines.join('\n')
-    },
+    }
+  } catch {
+    // Order lookup is advisory; a harness that throws here still gets the section.
   }
 }
 
 /**
  * Registers the Graphify prompt section on ctx.systemPrompt if available.
+ *
+ * @param ctx - DSH context owning the system prompt registry.
+ * @param detectedGraph - Project detected at mount time, used for bare assembly.
+ * @param config - Plugin configuration providing tool prefix and surface mode.
+ * @param resolver - Session-scoped project resolver.
+ * @returns The registration disposer, or a no-op when the registry is absent.
  */
 export function registerGraphifyPrompt(
   ctx: Context,
@@ -88,6 +227,8 @@ export function registerGraphifyPrompt(
     return () => {}
   }
 
+  const logger = typeof ctx.logger === 'function' ? ctx.logger('graphify') : undefined
+  warnOnSectionOrderDrift(ctx, logger)
   const section = createGraphifyPromptSection(detectedGraph, config, resolver)
   return ctx.systemPrompt.section(section)
 }

@@ -218,9 +218,8 @@ describe('graphify_status doctor tool', () => {
     })
     const client = new GraphifyMcpClient(config)
     const resolver = new ProjectResolver(config)
-    const project = resolver.resolve({ explicitPath: fixtureDir })
 
-    const definitions = createGraphifyToolDefinitions(client, config, project, resolver)
+    const definitions = createGraphifyToolDefinitions(client, config, resolver)
     const statusTool = definitions.find((d) => d.name === 'graphify_status')!
     assert.ok(statusTool)
 

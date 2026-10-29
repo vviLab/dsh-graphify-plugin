@@ -4,8 +4,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { GraphifyMcpClient } from './client.ts'
 import type { Config } from './config.ts'
 import type {
-  DetectedGraph,
-  ResolvedProject,
   ToolDefinition,
   ToolRunContext,
   ContentBlock,
@@ -117,11 +115,13 @@ export function validateProjectPathAccess(
 
 /**
  * Creates Graphify's native tools, doctor tool, plus capability and resource accessors.
+ *
+ * The tool surface does not depend on graph presence: tools resolve the target
+ * project per call and answer with an actionable error when a graph is missing.
  */
 export function createGraphifyToolDefinitions(
   client: GraphifyMcpClient,
   config: Config,
-  detectedGraph?: DetectedGraph | ResolvedProject | null,
   customResolver?: ProjectResolver
 ): ToolDefinition[] {
   const prefix = config.toolPrefix || ''
@@ -690,19 +690,24 @@ export function createGraphifyToolDefinitions(
 
 /**
  * Registers all configured Graphify tools into ctx.tools and returns a combined unregister disposer.
+ *
+ * @param ctx - DSH context owning the tool registry.
+ * @param client - Graphify MCP client used by every tool body.
+ * @param config - Plugin configuration providing surface mode and timeouts.
+ * @param resolver - Session-scoped project resolver.
+ * @returns The combined registration disposer.
  */
 export function registerGraphifyTools(
   ctx: Context,
   client: GraphifyMcpClient,
   config: Config,
-  detectedGraph?: DetectedGraph | ResolvedProject | null,
   resolver?: ProjectResolver
 ): () => void {
   if (!ctx.tools || typeof ctx.tools.register !== 'function') {
     return () => {}
   }
 
-  const definitions = createGraphifyToolDefinitions(client, config, detectedGraph, resolver)
+  const definitions = createGraphifyToolDefinitions(client, config, resolver)
   const disposers: Array<() => void> = []
 
   for (const def of definitions) {

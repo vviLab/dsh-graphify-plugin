@@ -91,10 +91,9 @@ describe('Lossless JSON serialization & tool output contract', () => {
     })
     const client = new GraphifyMcpClient(config)
     const resolver = new ProjectResolver(config)
-    const project = resolver.resolve({ explicitPath: fixtureDir })
 
     const runtime = createTestToolRuntime()
-    const definitions = createGraphifyToolDefinitions(client, config, project, resolver)
+    const definitions = createGraphifyToolDefinitions(client, config, resolver)
 
     for (const def of definitions) {
       runtime.register(def as any)
@@ -127,10 +126,9 @@ describe('Lossless JSON serialization & tool output contract', () => {
     })
     const client = new GraphifyMcpClient(config)
     const resolver = new ProjectResolver(config)
-    const project = resolver.resolve({ explicitPath: tempDir })
 
     const runtime = createTestToolRuntime()
-    const definitions = createGraphifyToolDefinitions(client, config, project, resolver)
+    const definitions = createGraphifyToolDefinitions(client, config, resolver)
 
     for (const def of definitions) {
       runtime.register(def as any)
@@ -165,10 +163,9 @@ describe('Lossless JSON serialization & tool output contract', () => {
     })
     const client = new GraphifyMcpClient(config)
     const resolver = new ProjectResolver(config)
-    const project = resolver.resolve({ explicitPath: fixtureDir })
 
     const runtime = createTestToolRuntime()
-    const definitions = createGraphifyToolDefinitions(client, config, project, resolver)
+    const definitions = createGraphifyToolDefinitions(client, config, resolver)
 
     for (const def of definitions) {
       runtime.register(def as any)
@@ -198,10 +195,9 @@ describe('Lossless JSON serialization & tool output contract', () => {
     })
     const client = new GraphifyMcpClient(config)
     const resolver = new ProjectResolver(config)
-    const project = resolver.resolve({ explicitPath: fixtureDir })
 
     const runtime = createTestToolRuntime()
-    const definitions = createGraphifyToolDefinitions(client, config, project, resolver)
+    const definitions = createGraphifyToolDefinitions(client, config, resolver)
 
     for (const def of definitions) {
       runtime.register(def as any)

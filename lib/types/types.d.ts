@@ -75,14 +75,31 @@ export interface ToolDefinition {
     /** Cooperative timeout budget in milliseconds. */
     timeoutMs?: number;
 }
+/**
+ * The subset of DeepSeek Harness's `AssembleContext` a prompt section may read.
+ *
+ * Assembly runs once per step, so a section can resolve the calling session
+ * instead of asserting process-wide facts. The shape mirrors
+ * {@link ToolRunContext.agent}, which tool execution already reads.
+ */
+export interface PromptAssemblyContext {
+    /** Agent whose request is being assembled, when the assembly is agent-scoped. */
+    readonly agent?: {
+        readonly session: {
+            readonly header: {
+                readonly cwd?: string;
+            };
+        };
+    };
+}
 /** Prompt section registration contract. */
 export interface PromptSection {
     /** Unique section name (e.g. 'graphify:guidance'). */
     name: string;
     /** Placement order (ascending). */
     order: number;
-    /** Static text or dynamic text generator. */
-    text: string | ((context: unknown) => string);
+    /** Static text, or text generated for each assembly from that assembly's context. */
+    text: string | ((context: PromptAssemblyContext) => string);
 }
 /** MCP Tool description from tools/list. */
 export interface McpToolInfo {
@@ -210,6 +227,8 @@ declare module '@deepseek-ai/cordis' {
         };
         systemPrompt: {
             section: (section: PromptSection) => () => void;
+            /** Centrally owned placement lookup; absent on harness builds that predate it. */
+            getSectionOrder?: (name: string) => number | undefined;
             [key: string]: unknown;
         };
     }

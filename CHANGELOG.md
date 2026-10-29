@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-10-29
+
+### Added
+- **State-aware guidance section**: `graphify:guidance` now resolves the assembling session's project on every assembly, so a session with no graph is told the graph is absent and given `/graphify build` instead of being told the workspace has one. Sessions sharing one DSH process no longer share one graph claim.
+- **Placement drift warning**: `GRAPHIFY_SECTION_ORDER` documents the intended window (after the deployment persona, before plan/team policy and per-tool guidance). When a harness build reports first-party orders outside that window, `registerGraphifyPrompt` logs one warning and still registers the section.
+
+### Changed
+- `PromptSection.text` now receives a `PromptAssemblyContext` (currently `agent.session.header.cwd`) instead of `unknown`; text may be state-dependent.
+- Guidance prose is rebuilt from a decision table: it drops wording that duplicated tool descriptions, and it now names `graphify_capabilities` and `graphify_call`, which the previous text omitted. Full mode renders 1515 characters (was 1831), compact 1297 (was 1640), and the no-graph text 576.
+- `createGraphifyToolDefinitions(client, config, resolver?)` and `registerGraphifyTools(ctx, client, config, resolver?)` no longer accept the unused detected-graph argument. This is a breaking change for programmatic consumers only; DSH profiles are unaffected.
+
+### Fixed
+- Sessions whose project had no `graphify-out/graph.json` were told "This workspace provides access to a local Graphify knowledge graph" and had to spend a failed tool call to learn otherwise.
+
 ## [0.2.1] - 2026-10-14
 
 ### Fixed

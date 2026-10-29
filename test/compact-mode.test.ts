@@ -6,6 +6,7 @@ import { Config } from '../src/config.ts'
 import { GraphifyMcpClient } from '../src/client.ts'
 import { createGraphifyToolDefinitions, getPrefixedToolName } from '../src/tools.ts'
 import { createGraphifyPromptSection } from '../src/prompt.ts'
+import type { DetectedGraph } from '../src/types.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const fixtureDir = path.join(__dirname, 'fixtures', 'sample-project')
@@ -109,16 +110,31 @@ describe('Compact Tool Mode and Dynamic Prefixing', () => {
       toolPrefix: 'graphify_',
       toolMode: 'compact',
     })
-    const section = createGraphifyPromptSection(null, config)
+    const section = createGraphifyPromptSection({ hasGraph: true } as DetectedGraph, config)
     const text = typeof section.text === 'function' ? section.text({}) : section.text
 
     assert.ok(text.includes('graphify_query_graph'))
     assert.ok(text.includes('graphify_get_node'))
     assert.ok(text.includes('graphify_status'))
+    assert.ok(text.includes('graphify_project_resource'))
     assert.ok(text.includes('Decision Policy: When to use Graphify'))
     assert.ok(text.includes('Authoritative Source Principle'))
     // In compact mode, specialist PR and god_node tools are omitted from prompt
     assert.ok(!text.includes('god_nodes'))
     assert.ok(!text.includes('list_prs'))
+  })
+
+  it('states a missing graph instead of advertising one, and names the fix', () => {
+    const config = Config({
+      toolPrefix: 'graphify_',
+      toolMode: 'compact',
+    })
+    const section = createGraphifyPromptSection(null, config)
+    const text = typeof section.text === 'function' ? section.text({}) : section.text
+
+    assert.ok(!text.includes('provides access to a local Graphify'))
+    assert.ok(text.includes('No Graphify knowledge graph is present'))
+    assert.ok(text.includes('/graphify build'))
+    assert.ok(text.includes('graphify_query_graph'))
   })
 })

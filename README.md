@@ -101,6 +101,7 @@ Add an override only when you need one:
 ## What the plugin adds
 
 - **Session-aware project resolution:** graph requests follow the active DSH workspace. Model-invoked access outside that workspace is blocked by default.
+- **Guidance that matches the session:** the system prompt section states whether this session's project actually has a graph, and names `/graphify build` when it does not. `compact` shortens the same section by dropping the specialist-tool lines, so the prose never names a tool the mode does not register.
 - **Freshness you can inspect:** `graphify_status` reports the resolved project, graph path, runtime availability, connection state, and whether the graph matches the indexed source state.
 - **Safe update policy:** incremental updates run only for changes the plugin can prove are code-only; otherwise it keeps the graph marked stale and asks for a full build.
 - **DSH-native operation:** `/graphify` builds or updates the receiving session's project and shows its durable result in DSH Web.
