@@ -62,7 +62,7 @@ describe('Graphify Plugin Integration', () => {
       // 1. Verify prompt section registration
       assert.ok(registeredSections.has('graphify:guidance'))
       const promptSec = registeredSections.get('graphify:guidance')!
-      assert.equal(promptSec.order, 250)
+      assert.equal(promptSec.order, GraphifyPlugin.GRAPHIFY_SECTION_ORDER)
       const promptText = typeof promptSec.text === 'function' ? promptSec.text({}) : promptSec.text
       assert.ok(promptText.includes('Graphify Knowledge Graph'))
       assert.ok(promptText.includes('query_graph'))

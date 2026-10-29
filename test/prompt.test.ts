@@ -48,7 +48,7 @@ describe('graphify prompt section', () => {
     const section = createGraphifyPromptSection(null, Config())
     assert.equal(section.name, 'graphify:guidance')
     assert.equal(section.order, GRAPHIFY_SECTION_ORDER)
-    assert.equal(GRAPHIFY_SECTION_ORDER, 250)
+    assert.equal(GRAPHIFY_SECTION_ORDER, 3100)
   })
 
   it('describes an available graph and its decision policy', () => {
@@ -207,12 +207,28 @@ describe('graphify prompt registration', () => {
     assert.doesNotThrow(dispose)
   })
 
-  it('warns when the platform places first-party sections around the intended window', () => {
-    const drifted = stubContext({ orders: { DEPLOYMENT_PERSONA_PREFIX: 300, PLAN_POLICY: 100 } })
+  it('takes its order from the harness external tool-server slot', () => {
+    const fromSlot = stubContext({ orders: { MCP_SERVERS: 3150 } })
+    registerGraphifyPrompt(fromSlot.ctx, null, Config())
+    assert.equal(fromSlot.sections.get('graphify:guidance')?.order, 3150)
+    assert.deepEqual(fromSlot.warnings, [], 'a published slot is not drift')
+
+    const fallback = stubContext({ orders: {} })
+    registerGraphifyPrompt(fallback.ctx, null, Config())
+    assert.equal(fallback.sections.get('graphify:guidance')?.order, GRAPHIFY_SECTION_ORDER)
+    assert.equal(fallback.warnings.length, 1, 'an unpublished slot warns once and still registers')
+  })
+
+  it('warns when the platform places the external tool-server band outside the intended window', () => {
+    const drifted = stubContext({
+      orders: { MCP_SERVERS: 3100, TOOL_COMPUTER_USE: 3200, TOOLS_SDK: 100 },
+    })
     registerGraphifyPrompt(drifted.ctx, null, Config())
     assert.equal(drifted.warnings.length, 2)
 
-    const healthy = stubContext({ orders: { DEPLOYMENT_PERSONA_PREFIX: 0, PLAN_POLICY: 500 } })
+    const healthy = stubContext({
+      orders: { MCP_SERVERS: 3100, TOOL_COMPUTER_USE: 3000, TOOLS_SDK: 5000 },
+    })
     registerGraphifyPrompt(healthy.ctx, null, Config())
     assert.deepEqual(healthy.warnings, [])
   })

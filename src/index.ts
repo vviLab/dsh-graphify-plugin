@@ -31,7 +31,7 @@ export {
   isPathContained,
   validateProjectPathAccess,
 } from './tools.ts'
-export { createGraphifyPromptSection, registerGraphifyPrompt } from './prompt.ts'
+export { createGraphifyPromptSection, registerGraphifyPrompt, GRAPHIFY_SECTION_ORDER } from './prompt.ts'
 export { registerGraphifyCommand } from './commands.ts'
 export {
   resolveGraphifyCommand,

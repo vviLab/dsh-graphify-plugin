@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2026-10-29
+
+### Changed
+- **Placed in the external tool-server band**: `GRAPHIFY_SECTION_ORDER` is now `3100` — the harness' `MCP_SERVERS` slot — instead of `250`. Third-party tool guidance now renders after every native per-tool section (`TOOL_*`, 1000–3000) and before the SDK tool conventions (`TOOLS_SDK`, 5000), rather than ahead of the harness' own plan and team policy.
+- `registerGraphifyPrompt` resolves the harness' published `MCP_SERVERS` order at mount and uses the exported constant only as a fallback; `createGraphifyPromptSection` takes an explicit `order` argument.
+- **Drift warning re-scoped**: it now checks the resolved order against `TOOL_COMPUTER_USE` and `TOOLS_SDK`, and warns once when the harness publishes no `MCP_SERVERS` slot.
+
 ## [0.3.0] - 2026-10-29
 
 ### Added

@@ -7,7 +7,7 @@ export * from './types.ts';
 export { detectGraph } from './detector.ts';
 export { GraphifyMcpClient } from './client.ts';
 export { createGraphifyToolDefinitions, registerGraphifyTools, getPrefixedToolName, isPathContained, validateProjectPathAccess, } from './tools.ts';
-export { createGraphifyPromptSection, registerGraphifyPrompt } from './prompt.ts';
+export { createGraphifyPromptSection, registerGraphifyPrompt, GRAPHIFY_SECTION_ORDER } from './prompt.ts';
 export { registerGraphifyCommand } from './commands.ts';
 export { resolveGraphifyCommand, resolveGraphifyCliCommand, resolveGraphifyRuntime, resolveGraphifyCliRuntime, getRuntimeInfo, DEFAULT_GRAPHIFY_VERSION, } from './server-process.ts';
 export { ProjectResolver } from './project-resolver.ts';
