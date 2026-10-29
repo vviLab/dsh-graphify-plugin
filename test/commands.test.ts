@@ -56,6 +56,30 @@ describe('/graphify command', () => {
     assert.match(result.text || '', new RegExp(`update",\\"${fixtureDir.replaceAll('/', '\\/')}\\"`))
   })
 
+  it('exports the resolved LLM key into the Graphify process', async () => {
+    const ctx = new Context()
+    let command: CommandDefinition | undefined
+    ctx.provide('commands')
+    ctx.commands = { register(definition: CommandDefinition) { command = definition; return () => {} } }
+    const envCliPath = path.join(__dirname, 'fixtures', 'fake-graphify-env-cli.mjs')
+    const config = Config({ cliCommand: process.execPath, cliArgs: [envCliPath] })
+    registerGraphifyCommand(ctx, config, fixtureDir, async () => ({
+      env: { ...process.env, DEEPSEEK_API_KEY: 'sk-env-probe' },
+      backend: 'deepseek',
+      envName: 'DEEPSEEK_API_KEY',
+      source: 'credentials',
+    }))
+
+    const result = await command!.handler({
+      rawInput: 'build . --code-only',
+      agent: { session: { header: { cwd: fixtureDir } } },
+      signal: new AbortController().signal,
+    })
+
+    assert.equal(result.kind, 'success')
+    assert.match(result.text || '', /graphify-env-cli:key=sk-env-probe/)
+  })
+
   it('terminates child process and quiesces when command is cancelled', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-cmd-cancel-'))
     const pidFile = path.join(tempDir, 'child.pid')

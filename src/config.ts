@@ -1,4 +1,6 @@
 import Schema from '@deepseek-ai/schemastery'
+import type { GraphifyBackendSetting } from './spawn-env.ts'
+import { GRAPHIFY_BACKENDS, readConfigField } from './spawn-env.ts'
 
 /**
  * Configuration for the DeepSeek Harness Graphify Plugin.
@@ -103,13 +105,52 @@ export interface Config {
   cwd?: string
 
   /**
+   * Optional literal API key for Graphify's semantic extraction pass.
+   *
+   * Write-only: the DSH settings form masks the value and never sends a stored
+   * key back to the browser. Leave it empty to resolve the key through the DSH
+   * credential store instead (see `apiKeyEnv`).
+   */
+  apiKey?: string
+
+  /**
+   * Credential reference naming the API key for semantic extraction.
+   *
+   * Resolved through the DSH credential store first and the launching
+   * environment second, then exported to Graphify under the variable its
+   * backend reads. Defaults to `DEEPSEEK_API_KEY`.
+   */
+  apiKeyEnv?: string
+
+  /**
+   * Graphify LLM backend used for semantic extraction.
+   *
+   * `auto` infers the backend from `apiKeyEnv`. Choose one explicitly when the
+   * key must be exported under a different variable. Only `gemini`, `kimi`,
+   * `claude`, and `openai` accept image inputs; a `deepseek` key leaves image
+   * files to the next backend that supports vision.
+   */
+  backend?: GraphifyBackendSetting
+
+  /**
    * Allow model-invoked Graphify tools to operate on projects outside the active DSH session workspace.
    * Defaults to false for security in marketplace deployments.
    */
   allowExternalProjects: boolean
 }
 
-export const Config: Schema<Config> = Schema.object({
+/**
+ * Plugin configuration schema.
+ *
+ * The credential fields are `volatile` so DSH projects them into the plugin
+ * settings form and applies edits live, and `role('secret')` so the stored key
+ * is redacted before it reaches a browser. Schemastery types a volatile field
+ * as an accessor object, while the plugin reads a plain resolved value, so the
+ * exported type is asserted to the plain `Config` interface and `apply()` reads
+ * the raw accessors through `readSecretSettings`. DSH accepts the same
+ * asserted shape (`dsh-web-search-deepseek` declares its key the same way).
+ */
+export const Config = Schema.object({
   command: Schema.string().default('auto').description('MCP server executable, or auto to discover Graphify'),
   args: Schema.array(Schema.string()).default([]).description('Arguments for a configured MCP server executable'),
   graphifyVersion: Schema.string().description('Pinned graphifyy version for uv fallback, for example 0.9.57'),
@@ -132,8 +173,21 @@ export const Config: Schema<Config> = Schema.object({
     maxAttempts: Schema.number().default(10).description('Maximum consecutive reconnect attempts'),
   }).default({ enabled: true, initialDelayMs: 500, maxDelayMs: 30000, maxAttempts: 10 }).description('Connection resilience options'),
   cwd: Schema.string().description('Explicit working directory for Graphify subprocess'),
+  apiKey: Schema.string()
+    .role('secret')
+    .volatile()
+    .description('Optional literal LLM API key for semantic extraction (documents, papers, images). Write-only; DSH masks it'),
+  apiKeyEnv: Schema.string()
+    .role('credential-ref')
+    .default('DEEPSEEK_API_KEY')
+    .volatile()
+    .description('Credential reference resolved through the DSH credential store, then the launching environment'),
+  backend: Schema.union(['auto', 'gemini', 'kimi', 'claude', 'openai', 'deepseek', 'ollama'])
+    .default('auto')
+    .volatile()
+    .description('Graphify LLM backend for semantic extraction; auto infers it from apiKeyEnv'),
   allowExternalProjects: Schema.boolean().default(false).description('Allow model-invoked Graphify tools to operate on projects outside the active DSH session workspace'),
-})
+}) as unknown as Schema<Config>
 
 /**
  * Validates a resolved configuration object, throwing actionable errors if
@@ -174,5 +228,21 @@ export function validateConfig(config: Config): void {
     if (typeof config.reconnect.maxAttempts !== 'number' || !Number.isInteger(config.reconnect.maxAttempts) || config.reconnect.maxAttempts < 0) {
       throw new Error(`Invalid dsh-graphify configuration: reconnect.maxAttempts must be a non-negative integer, got ${config.reconnect.maxAttempts}.`)
     }
+  }
+
+  // Volatile fields may arrive as live references; validation reads their current value.
+  const backend = readConfigField(config, 'backend')
+  if (backend !== undefined && backend !== 'auto' && !(GRAPHIFY_BACKENDS as readonly string[]).includes(backend as string)) {
+    throw new Error(`Invalid dsh-graphify configuration: backend must be 'auto' or one of ${GRAPHIFY_BACKENDS.join(', ')}, got '${String(backend)}'.`)
+  }
+
+  const apiKey = readConfigField(config, 'apiKey')
+  if (apiKey !== undefined && typeof apiKey !== 'string') {
+    throw new Error('Invalid dsh-graphify configuration: apiKey must be a string.')
+  }
+
+  const apiKeyEnv = readConfigField(config, 'apiKeyEnv')
+  if (apiKeyEnv !== undefined && apiKeyEnv !== '' && (typeof apiKeyEnv !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(apiKeyEnv))) {
+    throw new Error(`Invalid dsh-graphify configuration: apiKeyEnv must be an environment-variable name, got '${String(apiKeyEnv)}'.`)
   }
 }

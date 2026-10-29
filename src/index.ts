@@ -17,6 +17,13 @@ import { ProjectResolver } from './project-resolver.ts'
 import { checkGraphFreshness, ProjectUpdateCoalescer } from './freshness.ts'
 import { collectGraphifyStatus, formatGraphifyStatus } from './status.ts'
 import { getPackageVersion } from './version.ts'
+import {
+  describeSpawnEnvironment,
+  readConfigField,
+  readSecretSettings,
+  resolveSpawnEnvironment,
+  type CredentialLookup,
+} from './spawn-env.ts'
 
 export const name = 'dsh-graphify'
 export const inject = ['tools', 'systemPrompt']
@@ -52,6 +59,60 @@ export {
 export { collectGraphifyStatus, formatGraphifyStatus } from './status.ts'
 export { toLosslessJson } from './lossless-json.ts'
 export { getPackageVersion } from './version.ts'
+export {
+  BACKEND_API_KEY_ENV,
+  describeSpawnEnvironment,
+  GRAPHIFY_BACKENDS,
+  inferBackendFromEnvName,
+  readSecretSettings,
+  resolveSpawnEnvironment,
+} from './spawn-env.ts'
+export type {
+  ApiKeySource,
+  CredentialLookup,
+  GraphifyBackend,
+  GraphifyBackendSetting,
+  GraphifySecretSettings,
+  SpawnEnvironmentResolution,
+} from './spawn-env.ts'
+
+/** Fields DSH hands a plugin as live accessors rather than plain values. */
+const VOLATILE_CONFIG_FIELDS = ['apiKey', 'apiKeyEnv', 'backend'] as const
+
+/**
+ * Resolves the plugin config for the static half of the entry.
+ *
+ * Volatile fields are read-only references in both directions: DSH hands them
+ * in that way, and the schema returns them that way. The static config needs
+ * plain values, so they are unwrapped before and after schema resolution; the
+ * live references stay reachable through the raw `config` object, and
+ * `readSecretSettings` re-reads them per invocation.
+ */
+function resolveConfig(config?: Config): Config {
+  const raw = (config ?? {}) as unknown as Record<string, unknown>
+  const input: Record<string, unknown> = {}
+  for (const key of Object.keys(raw)) {
+    const value = readConfigField(raw, key)
+    if (value !== undefined) input[key] = value
+  }
+
+  const resolved = Config(input as unknown as Config) as unknown as Record<string, unknown>
+  const plain: Record<string, unknown> = { ...resolved }
+  for (const key of VOLATILE_CONFIG_FIELDS) {
+    const value = readConfigField(resolved, key)
+    if (value !== undefined) plain[key] = value
+    else delete plain[key]
+  }
+  return plain as unknown as Config
+}
+
+/** Reads the credential service when this harness build exposes one. */
+function credentialsLookup(ctx: Context): CredentialLookup | null {
+  const get = (ctx as unknown as { get?: (name: string) => unknown }).get
+  if (typeof get !== 'function') return null
+  const credentials = get.call(ctx, 'credentials') as CredentialLookup | undefined
+  return credentials && typeof credentials.resolve === 'function' ? credentials : null
+}
 
 /**
  * DeepSeek Harness Graphify Plugin.
@@ -61,13 +122,22 @@ export { getPackageVersion } from './version.ts'
  * and /graphify slash commands into the DeepSeek Harness runtime.
  */
 export function apply(ctx: Context, config?: Config): void {
-  const cfg = Config(config ?? ({} as Config))
+  const cfg = resolveConfig(config)
   validateConfig(cfg)
   const logger = typeof ctx.logger === 'function' ? ctx.logger('graphify') : undefined
 
   const resolver = new ProjectResolver(cfg)
   const initialProject = resolver.resolve()
   const workingDir = initialProject.projectRoot
+
+  // Re-read per invocation so a key edited in the settings form reaches the
+  // next build without remounting the entry.
+  const resolveSpawnEnvironmentSource = () =>
+    resolveSpawnEnvironment({
+      settings: readSecretSettings(config),
+      credentials: credentialsLookup(ctx),
+    })
+  const describeLlm = async () => describeSpawnEnvironment(await resolveSpawnEnvironmentSource())
 
   const client = new GraphifyMcpClient({
     resolveRuntime: () => resolveGraphifyRuntime(cfg, initialProject.graphJsonPath || undefined),
@@ -86,7 +156,7 @@ export function apply(ctx: Context, config?: Config): void {
       ? registerGraphifyPrompt(ctx, initialProject, cfg, resolver)
       : () => {}
 
-    const unregisterTools = registerGraphifyTools(ctx, client, cfg, resolver)
+    const unregisterTools = registerGraphifyTools(ctx, client, cfg, resolver, { describeLlm })
 
     return async () => {
       try {
@@ -110,7 +180,7 @@ export function apply(ctx: Context, config?: Config): void {
 
   ctx.inject(['commands'], (cmdCtx) => {
     cmdCtx.effect(() => {
-      const unregisterCommand = registerGraphifyCommand(cmdCtx, cfg, workingDir)
+      const unregisterCommand = registerGraphifyCommand(cmdCtx, cfg, workingDir, resolveSpawnEnvironmentSource)
       return () => {
         try {
           unregisterCommand()

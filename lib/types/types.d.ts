@@ -203,6 +203,11 @@ export interface GraphifyStatusResult {
         readonly branch?: string | null;
     } | null;
     readonly freshness: GraphFreshnessInfo;
+    /**
+     * Description of the LLM credential the next build would use, without the
+     * key. Absent when the caller has no credential resolution available.
+     */
+    readonly llm?: string;
     readonly runtime: {
         readonly command: string;
         readonly version?: string;

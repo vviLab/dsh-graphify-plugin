@@ -15,6 +15,8 @@ export { checkGraphFreshness, ProjectUpdateCoalescer, writeGraphifyIndexMetadata
 export { collectGraphifyStatus, formatGraphifyStatus } from './status.ts';
 export { toLosslessJson } from './lossless-json.ts';
 export { getPackageVersion } from './version.ts';
+export { BACKEND_API_KEY_ENV, describeSpawnEnvironment, GRAPHIFY_BACKENDS, inferBackendFromEnvName, readSecretSettings, resolveSpawnEnvironment, } from './spawn-env.ts';
+export type { ApiKeySource, CredentialLookup, GraphifyBackend, GraphifyBackendSetting, GraphifySecretSettings, SpawnEnvironmentResolution, } from './spawn-env.ts';
 /**
  * DeepSeek Harness Graphify Plugin.
  *

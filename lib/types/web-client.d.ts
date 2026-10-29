@@ -2,6 +2,7 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 import type { ChatNodeViewProps } from '@deepseek-ai/dsh-client-ui-chat/client';
 import type { Context as ClientContext } from '@deepseek-ai/cordis';
 export { graphifyCommandInputDefinition, graphifyCommandText } from './web-command.ts';
+export { GraphifySettingsController, GraphifySettingsPanel, registerGraphifySettings } from './web-settings.ts';
 declare const zh: {
     readonly 'commandInput.aria': "图谱命令输入";
 };

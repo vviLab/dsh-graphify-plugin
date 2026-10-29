@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **LLM credential settings**: `backend`, `apiKeyEnv`, and `apiKey` are now `volatile` plugin fields, so DSH renders them on the plugin settings page and applies an edit to the next build without restarting the entry. `apiKey` carries `role('secret')`, so a stored key is redacted before it reaches a browser.
+- **Credential resolution for semantic extraction**: before a build or update, the plugin resolves the key through `ctx.credentials` first and the launching environment second, then exports it to the Graphify subprocess under the variable the chosen backend reads. A key already saved for a DSH model provider is reused without being copied into the plugin config.
+- `graphify_status` reports the backend and the key source of the next build, never the key itself.
+
+- **Configuration section on the plugin's own page**: the Web client fills the plugin manager's `plugins.bundle.config` slot, keyed by the package name, so Settings → Plugins → dsh-graphify shows a configuration section beside the package's source, version, and update controls instead of a separate settings tab. It is registered only while the Host serves the `dsh-graphify` namespace, and it stages a credential reference plus an optional literal key that are written on Save; the literal is write-only, and a blank draft leaves the stored value alone. DSH renders no generic page for a plugin's `Config`, so a plugin without this contribution shows no settings at all.
+
+### Changed
+- `registerGraphifyCommand` accepts an optional spawn-environment source, and `registerGraphifyTools` accepts an optional dependency bag whose `describeLlm` feeds the new status line. Both keep the previous behavior when omitted.
+- `Config` is declared as a volatile-bearing schema and asserted to the plain `Config` interface; `validateConfig` and `apply` unwrap live references before reading them.
+
+---
+
 ## [0.4.0] - 2026-10-29
 
 ### Changed

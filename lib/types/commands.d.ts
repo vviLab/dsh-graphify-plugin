@@ -1,5 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { Config } from './config.ts';
+import type { SpawnEnvironmentResolution } from './spawn-env.ts';
+/** Supplies the spawn environment that carries the configured LLM key for one invocation. */
+export type SpawnEnvironmentSource = () => Promise<SpawnEnvironmentResolution>;
 export interface CommandInvocation {
     commandId?: unknown;
     agent: {
@@ -52,4 +55,4 @@ export declare const ALLOWED_GRAPHIFY_FLAGS: readonly ["--force", "--no-cluster"
  */
 export declare function parseGraphifyCommand(rawInput: string, projectRoot: string): GraphifyCommandRequest;
 /** Registers the `/graphify` build and incremental-update command. */
-export declare function registerGraphifyCommand(ctx: Context, config: Config, defaultProjectRoot: string): () => void;
+export declare function registerGraphifyCommand(ctx: Context, config: Config, defaultProjectRoot: string, resolveSpawnEnv?: SpawnEnvironmentSource): () => void;

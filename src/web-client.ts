@@ -7,7 +7,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { graphifyCommandInputDefinition } from './web-command.ts'
+import { registerGraphifySettings } from './web-settings.ts'
 export { graphifyCommandInputDefinition, graphifyCommandText } from './web-command.ts'
+export { GraphifySettingsController, GraphifySettingsPanel, registerGraphifySettings } from './web-settings.ts'
 
 const zh = {
   'commandInput.aria': '图谱命令输入',
@@ -99,4 +101,11 @@ export function apply(ctx: ClientContext): void {
     key: 'graphify-command-input',
     locale: 'graphify',
   }, GraphifyCommandInputView))
+  // Optional: a deployment whose Web client composes no settings surface still
+  // gets the command presentation above.
+  ;(ctx as unknown as {
+    inject: (deps: string[], callback: (inner: unknown) => void) => void
+  }).inject(['configForms', 'slots', 'locale'], (settingsCtx) => {
+    registerGraphifySettings(settingsCtx)
+  })
 }

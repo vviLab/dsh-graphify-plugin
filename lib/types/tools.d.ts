@@ -22,13 +22,21 @@ export declare function isPathContained(parentDir: string, childPath: string): b
  * When `allowExternalProjects` is false, restricts model access to the active session workspace.
  */
 export declare function validateProjectPathAccess(explicitPath: string | undefined, execution: ToolRunContext | undefined, config: Config): void;
+/** Optional runtime facts a tool surface can report without owning them. */
+export interface GraphifyToolDependencies {
+    /**
+     * Describes the LLM credential the next build would use, for diagnostics.
+     * The description never contains the key itself.
+     */
+    describeLlm?: () => Promise<string>;
+}
 /**
  * Creates Graphify's native tools, doctor tool, plus capability and resource accessors.
  *
  * The tool surface does not depend on graph presence: tools resolve the target
  * project per call and answer with an actionable error when a graph is missing.
  */
-export declare function createGraphifyToolDefinitions(client: GraphifyMcpClient, config: Config, customResolver?: ProjectResolver): ToolDefinition[];
+export declare function createGraphifyToolDefinitions(client: GraphifyMcpClient, config: Config, customResolver?: ProjectResolver, deps?: GraphifyToolDependencies): ToolDefinition[];
 /**
  * Registers all configured Graphify tools into ctx.tools and returns a combined unregister disposer.
  *
@@ -38,4 +46,4 @@ export declare function createGraphifyToolDefinitions(client: GraphifyMcpClient,
  * @param resolver - Session-scoped project resolver.
  * @returns The combined registration disposer.
  */
-export declare function registerGraphifyTools(ctx: Context, client: GraphifyMcpClient, config: Config, resolver?: ProjectResolver): () => void;
+export declare function registerGraphifyTools(ctx: Context, client: GraphifyMcpClient, config: Config, resolver?: ProjectResolver, deps?: GraphifyToolDependencies): () => void;

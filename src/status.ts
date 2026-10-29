@@ -14,6 +14,11 @@ import { getPackageVersion } from './version.ts'
 export interface CollectStatusOptions {
   /** If true, proactively probes the MCP connection if disconnected (default false). */
   readonly probe?: boolean
+  /**
+   * Description of the LLM credential the next build would use, without the
+   * key. Omitted when the caller has no credential resolution available.
+   */
+  readonly llm?: string
 }
 
 /**
@@ -154,6 +159,7 @@ export async function collectGraphifyStatus(
     git,
     freshness,
     runtime,
+    ...(options?.llm ? { llm: options.llm } : {}),
     mcp: {
       state: mcpState,
       reconnectAttempts: client.getReconnectAttempts(),
@@ -219,6 +225,9 @@ export function formatGraphifyStatus(status: GraphifyStatusResult): string {
 
   const runtimeVer = status.runtime.version ? ` (v${status.runtime.version})` : ''
   lines.push(`• Runtime: ${status.runtime.command} [${status.runtime.source}]${runtimeVer}`)
+  if (status.llm) {
+    lines.push(`• LLM Key: ${status.llm}`)
+  }
   const reconnectInfo = status.mcp.state === 'reconnecting'
     ? ` (attempt ${status.mcp.reconnectAttempts}/${status.mcp.maxReconnectAttempts})`
     : ''

@@ -17,6 +17,10 @@ import {
   getChangedSourceInventory,
   isSafeChange,
 } from './freshness.ts'
+import type { SpawnEnvironmentResolution } from './spawn-env.ts'
+
+/** Supplies the spawn environment that carries the configured LLM key for one invocation. */
+export type SpawnEnvironmentSource = () => Promise<SpawnEnvironmentResolution>
 
 export interface CommandInvocation {
   commandId?: unknown
@@ -129,13 +133,15 @@ function tokenize(input: string): string[] {
 export function registerGraphifyCommand(
   ctx: Context,
   config: Config,
-  defaultProjectRoot: string
+  defaultProjectRoot: string,
+  resolveSpawnEnv?: SpawnEnvironmentSource
 ): () => void {
   const def: CommandDefinition = {
     name: 'graphify',
     description: 'Build or incrementally update this project’s Graphify knowledge graph.',
     input: { hint: '[build|update] [path] [--force|--no-cluster|--code-only|--no-viz]' },
     async handler(invocation: CommandInvocation): Promise<CommandResult> {
+      let spawnEnv: SpawnEnvironmentResolution | undefined
       try {
         const projectRoot = invocation.agent.session.header.cwd || defaultProjectRoot
         const request = parseGraphifyCommand(invocation.rawInput, projectRoot)
@@ -147,11 +153,12 @@ export function registerGraphifyCommand(
           }
         }
         const { command, args } = cliResolution
+        spawnEnv = await resolveSpawnEnvironmentFor(resolveSpawnEnv)
         const canonicalGraphJson = path.join(request.projectRoot, 'graphify-out', 'graph.json')
 
         if (request.operation === 'build') {
           const isCodeOnly = request.flags.includes('--code-only')
-          const text = await runGraphify(command, args, request.projectRoot, invocation.signal)
+          const text = await runGraphify(command, args, request.projectRoot, invocation.signal, spawnEnv?.env)
 
           if (isCodeOnly) {
             // --code-only builds skip semantic/document sources; do not establish full-corpus baseline.
@@ -228,7 +235,7 @@ export function registerGraphifyCommand(
           }
         }
 
-        const text = await runGraphify(command, args, request.projectRoot, invocation.signal)
+        const text = await runGraphify(command, args, request.projectRoot, invocation.signal, spawnEnv?.env)
 
         if (eligibleForCheckpoint) {
           if (performPostUpdateValidation(request.projectRoot, canonicalGraphJson)) {
@@ -270,7 +277,8 @@ export function registerGraphifyCommand(
         }
       } catch (error) {
         const text = error instanceof Error ? error.message : String(error)
-        return { kind: 'error', text: `Graphify failed: ${text}` }
+        const hint = spawnEnv?.note ? `\n\n${spawnEnv.note}` : ''
+        return { kind: 'error', text: `Graphify failed: ${text}${hint}` }
       }
     },
   }
@@ -278,10 +286,35 @@ export function registerGraphifyCommand(
   return ctx.commands.register(def)
 }
 
+/**
+ * Resolves the spawn environment for one invocation.
+ *
+ * A credential lookup failure degrades to "no key configured" instead of
+ * failing the command: Graphify then reports the missing key itself, which is
+ * the message that names the flag or backend the user can act on.
+ */
+async function resolveSpawnEnvironmentFor(
+  source?: SpawnEnvironmentSource
+): Promise<SpawnEnvironmentResolution | undefined> {
+  if (!source) return undefined
+  try {
+    return await source()
+  } catch {
+    // Only the provider's own rejection is swallowed; the build still runs.
+    return undefined
+  }
+}
+
 /** Runs Graphify while preserving a bounded, useful result for the command UI. */
-function runGraphify(command: string, args: readonly string[], cwd: string, signal: AbortSignal): Promise<string> {
+function runGraphify(
+  command: string,
+  args: readonly string[],
+  cwd: string,
+  signal: AbortSignal,
+  env?: NodeJS.ProcessEnv
+): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], ...(env ? { env } : {}) })
     let stdout = ''
     let stderr = ''
     let settled = false

@@ -4,6 +4,11 @@ import type { GraphifyMcpClient } from './client.ts';
 export interface CollectStatusOptions {
     /** If true, proactively probes the MCP connection if disconnected (default false). */
     readonly probe?: boolean;
+    /**
+     * Description of the LLM credential the next build would use, without the
+     * key. Omitted when the caller has no credential resolution available.
+     */
+    readonly llm?: string;
 }
 /**
  * Collects a comprehensive status report for Graphify in the given project/session.

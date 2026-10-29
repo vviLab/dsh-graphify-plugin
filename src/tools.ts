@@ -113,6 +113,15 @@ export function validateProjectPathAccess(
   }
 }
 
+/** Optional runtime facts a tool surface can report without owning them. */
+export interface GraphifyToolDependencies {
+  /**
+   * Describes the LLM credential the next build would use, for diagnostics.
+   * The description never contains the key itself.
+   */
+  describeLlm?: () => Promise<string>
+}
+
 /**
  * Creates Graphify's native tools, doctor tool, plus capability and resource accessors.
  *
@@ -122,7 +131,8 @@ export function validateProjectPathAccess(
 export function createGraphifyToolDefinitions(
   client: GraphifyMcpClient,
   config: Config,
-  customResolver?: ProjectResolver
+  customResolver?: ProjectResolver,
+  deps?: GraphifyToolDependencies
 ): ToolDefinition[] {
   const prefix = config.toolPrefix || ''
   const resolver = customResolver ?? new ProjectResolver(config)
@@ -363,7 +373,13 @@ export function createGraphifyToolDefinitions(
           toolContext: exec,
         })
         const shouldProbe = rawArgs.probe !== false
-        const status = await collectGraphifyStatus(project, client, config, { probe: shouldProbe })
+        const llm = deps?.describeLlm
+          ? await deps.describeLlm().catch(() => undefined)
+          : undefined
+        const status = await collectGraphifyStatus(project, client, config, {
+          probe: shouldProbe,
+          ...(llm ? { llm } : {}),
+        })
         const text = formatGraphifyStatus(status)
         return toLosslessJson({
           text,
@@ -701,13 +717,14 @@ export function registerGraphifyTools(
   ctx: Context,
   client: GraphifyMcpClient,
   config: Config,
-  resolver?: ProjectResolver
+  resolver?: ProjectResolver,
+  deps?: GraphifyToolDependencies
 ): () => void {
   if (!ctx.tools || typeof ctx.tools.register !== 'function') {
     return () => {}
   }
 
-  const definitions = createGraphifyToolDefinitions(client, config, resolver)
+  const definitions = createGraphifyToolDefinitions(client, config, resolver, deps)
   const disposers: Array<() => void> = []
 
   for (const def of definitions) {

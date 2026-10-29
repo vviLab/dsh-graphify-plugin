@@ -1,4 +1,5 @@
 import Schema from '@deepseek-ai/schemastery';
+import type { GraphifyBackendSetting } from './spawn-env.ts';
 /**
  * Configuration for the DeepSeek Harness Graphify Plugin.
  */
@@ -88,11 +89,47 @@ export interface Config {
      */
     cwd?: string;
     /**
+     * Optional literal API key for Graphify's semantic extraction pass.
+     *
+     * Write-only: the DSH settings form masks the value and never sends a stored
+     * key back to the browser. Leave it empty to resolve the key through the DSH
+     * credential store instead (see `apiKeyEnv`).
+     */
+    apiKey?: string;
+    /**
+     * Credential reference naming the API key for semantic extraction.
+     *
+     * Resolved through the DSH credential store first and the launching
+     * environment second, then exported to Graphify under the variable its
+     * backend reads. Defaults to `DEEPSEEK_API_KEY`.
+     */
+    apiKeyEnv?: string;
+    /**
+     * Graphify LLM backend used for semantic extraction.
+     *
+     * `auto` infers the backend from `apiKeyEnv`. Choose one explicitly when the
+     * key must be exported under a different variable. Only `gemini`, `kimi`,
+     * `claude`, and `openai` accept image inputs; a `deepseek` key leaves image
+     * files to the next backend that supports vision.
+     */
+    backend?: GraphifyBackendSetting;
+    /**
      * Allow model-invoked Graphify tools to operate on projects outside the active DSH session workspace.
      * Defaults to false for security in marketplace deployments.
      */
     allowExternalProjects: boolean;
 }
+/**
+ * Plugin configuration schema.
+ *
+ * The credential fields are `volatile` so DSH projects them into the plugin
+ * settings form and applies edits live, and `role('secret')` so the stored key
+ * is redacted before it reaches a browser. Schemastery types a volatile field
+ * as an accessor object, while the plugin reads a plain resolved value, so the
+ * exported type is asserted to the plain `Config` interface and `apply()` reads
+ * the raw accessors through `readSecretSettings`. DSH accepts the same
+ * asserted shape (`dsh-web-search-deepseek` declares its key the same way).
+ */
 export declare const Config: Schema<Config>;
 /**
  * Validates a resolved configuration object, throwing actionable errors if

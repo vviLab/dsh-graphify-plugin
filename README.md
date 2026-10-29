@@ -119,6 +119,55 @@ Add an override only when you need one:
 
 `/graphify update` is intentionally conservative. Run `/graphify` after changes to Markdown, package metadata, configuration, or any other non-code source that should be represented in the graph.
 
+## Let semantic extraction use an LLM key
+
+Graphify indexes code with a local AST pass that needs no credentials. Documents, papers, and images go through an LLM instead, so a build over a documentation-heavy tree stops with:
+
+```text
+error: no LLM API key found (8351 doc/paper/image file(s) need semantic extraction).
+```
+
+The plugin resolves that key itself, in this order:
+
+1. **The DSH credential store.** `apiKeyEnv` (default `DEEPSEEK_API_KEY`) is looked up through `ctx.credentials`, so a key already saved for a DSH model provider is reused without copying it anywhere.
+2. **The launching environment.** If the store has no value, the same variable name is read from the process that started DSH.
+3. **A literal key typed into the plugin settings form.** `apiKey` is declared with `role('secret')`, so DSH masks it and never sends a stored value back to the browser.
+
+The resolved key is exported to the Graphify subprocess under the variable its backend reads (`DEEPSEEK_API_KEY` for `deepseek`, `GEMINI_API_KEY` for `gemini`, and so on), which keeps Graphify's own auto-detection from routing the extraction to a different provider on a machine with several keys set.
+
+### Configure it in Settings → Plugins → dsh-graphify
+
+The section lives on the plugin's own page rather than in a separate settings
+tab, because that page is where DSH already shows an installed package: its
+source, version, update, and uninstall, plus a `plugins.bundle.config` slot the
+plugin manager renders a configuration section into, keyed by package name. The
+plugin fills that slot, so its configuration sits beside the thing it
+configures; the Plugins tabs themselves belong to cross-plugin features (the
+market, the plugin manager).
+
+The section is registered only while the Host serves the `dsh-graphify` settings
+namespace, so a deployment running an older build of this plugin shows no empty
+form.
+
+Open **设置 → 插件 → 已安装插件 → dsh-graphify** and the section appears above
+源代码/来源信息. It edits two controls and stages them until **Save**:
+
+| Control | Meaning |
+| --- | --- |
+| Credential reference | Names the key in the DSH credential store. Default `DEEPSEEK_API_KEY`; `GEMINI_API_KEY`, `MOONSHOT_API_KEY`, `ANTHROPIC_API_KEY`, and `OPENAI_API_KEY` select the other backends. |
+| API key | Optional literal, write-only. The stored value is redacted from every response, and a blank draft writes nothing, so it is never clobbered by accident. |
+
+A third field, `backend`, exists in the configuration schema but is not a
+control: `auto` infers the backend from the reference, and a deployment can pin
+it in `cordis.patch.yml` when inference is not what it wants.
+
+Each field is `volatile`, so an edit applies to the next build without
+restarting DSH. The literal written by the second control is stored in the
+profile's configuration, so the credential store stays the better home for a
+long-lived key.
+
+`graphify_status` reports which backend and source the next build would use, never the key itself.
+
 ## Configuration reference
 
 The defaults work for most single-repository sessions. These are the settings users commonly change:
@@ -132,6 +181,9 @@ The defaults work for most single-repository sessions. These are the settings us
 | `cwd` | active session project | Supply a fallback project directory when a session has no workspace. |
 | `allowExternalProjects` | `false` | Allow model tools to access projects beyond the session workspace. |
 | `toolPrefix` | empty | Avoid tool-name collisions in a larger DSH profile. |
+| `backend` | `auto` | Target a specific LLM backend instead of inferring it from `apiKeyEnv`. |
+| `apiKeyEnv` | `DEEPSEEK_API_KEY` | Point semantic extraction at another credential reference. |
+| `apiKey` | unset | Type a key directly in the plugin settings form instead of using the credential store. |
 
 See [`src/config.ts`](src/config.ts) for the complete, typed configuration schema and defaults.
 
